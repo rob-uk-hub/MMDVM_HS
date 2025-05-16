@@ -72,6 +72,7 @@ const uint8_t  MARK_NONE  = 0x00U;
 #include "DMRTX.h"
 #endif
 
+#include "DMRUserRX.h"
 #include "DStarRX.h"
 #include "DStarTX.h"
 #include "YSFRX.h"
@@ -110,6 +111,7 @@ extern bool m_m17Enable;
 extern bool m_pocsagEnable;
 
 extern bool m_duplex;
+extern bool m_dmrUserMode;
 
 extern bool m_tx;
 extern bool m_dcd;
@@ -128,6 +130,7 @@ extern CDMRRX dmrRX;
 extern CDMRTX dmrTX;
 #endif
 
+extern CDMRUserRX dmrUserRX;
 extern CDMRDMORX dmrDMORX;
 extern CDMRDMOTX dmrDMOTX;
 

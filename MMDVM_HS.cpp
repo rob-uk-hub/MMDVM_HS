@@ -47,6 +47,7 @@ bool m_m17Enable    = true;
 bool m_pocsagEnable = true;
 
 bool m_duplex = false;
+bool m_dmrUserMode = false;
 
 bool m_tx  = false;
 bool m_dcd = false;
@@ -62,6 +63,7 @@ CDMRRX     dmrRX;
 CDMRTX     dmrTX;
 #endif
 
+CDMRUserRX dmrUserRX;
 CDMRDMORX  dmrDMORX;
 CDMRDMOTX  dmrDMOTX;
 
@@ -111,12 +113,21 @@ void loop()
 
   if (m_dmrEnable && m_modemState == STATE_DMR && m_calState == STATE_IDLE) {
 #if defined(DUPLEX)
-    if (m_duplex)
-      dmrTX.process();
-    else
-      dmrDMOTX.process();
+    if(m_dmrUserMode) {
+      // Do nothing
+    } else {
+      if (m_duplex) {
+        dmrTX.process();
+      } else {
+        dmrDMOTX.process();
+      }
+    }
 #else
-    dmrDMOTX.process();
+    if(m_dmrUserMode) {
+      // Do nothing for now
+    } else {
+      dmrDMOTX.process();
+    }
 #endif
   }
   
