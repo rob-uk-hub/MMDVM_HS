@@ -39,6 +39,8 @@ const uint8_t cachInterleave[CACH_SIZE_BITS] = {
  #define WRITE_BIT1(p,i,b) p[(i)>>3] = (b) ? (p[(i)>>3] | BIT_MASK_TABLE[(i)&7]) : (p[(i)>>3] & ~BIT_MASK_TABLE[(i)&7])
  #define READ_BIT1(p,i)    ((p[(i)>>3] & BIT_MASK_TABLE[(i)&7]) >> (7 - ((i)&7)))
  
+ extern bool decodeDMRHamming74(uint8_t *received);
+
  CDMRUserRX::CDMRUserRX() :
  m_patternBuffer(0U),
  m_buffer(),
@@ -72,7 +74,7 @@ const uint8_t cachInterleave[CACH_SIZE_BITS] = {
      tactBits[i] = cachdata[i];
    }
  
-   if (!m_hamming.Hamming_7_4_decode(tactBits))
+   if (!decodeDMRHamming74(tactBits))
    {
      return false;
    }

@@ -1,172 +1,94 @@
-#include "Hamming.h"
-#include <cstring>
+/*
+ *   Copyright (C) 2025 by Rob Williams M1BGT
+ *
+ *   This program is free software; you can redistribute it and/or modify
+ *   it under the terms of the GNU General Public License as published by
+ *   the Free Software Foundation; either version 2 of the License, or
+ *   (at your option) any later version.
+ *
+ *   This program is distributed in the hope that it will be useful,
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *   GNU General Public License for more details.
+ *
+ *   You should have received a copy of the GNU General Public License
+ *   along with this program; if not, write to the Free Software
+ *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
 
+#include <stdint.h>
+//#include <cstdio> // Only required for additional debug
+#include "Globals.h"
 
-CHamming::CHamming()
-{
-    Hamming_7_4_init();
-    QR_16_7_6_init();
-}
+// Map from syndrome value to error bit index in DMR order
+const int syndromeMap[8] = {
+    -1, // 0: no error
+    4, // syndrome 1 → P1 (bit 4)
+    5, // syndrome 2 → P2 (bit 5)
+    2, // syndrome 3 → D3 (bit 2)
+    6, // syndrome 4 → P3 (bit 6)
+    0, // syndrome 5 → D2 (bit 1)
+    3, // syndrome 6 → D4 (bit 3)
+    1, // syndrome 7 → D2 (bit 1)
+};
 
-void CHamming::Hamming_7_4_init()
-{
-    // correctable bit positions given syndrome bits as index (see above)
-    memset(Hamming_7_4_m_corr, 0xFF, 8); // initialize with all invalid positions
-    Hamming_7_4_m_corr[0b101] = 0;
-    Hamming_7_4_m_corr[0b111] = 1;
-    Hamming_7_4_m_corr[0b110] = 2;
-    Hamming_7_4_m_corr[0b011] = 3;
-    Hamming_7_4_m_corr[0b100] = 4;
-    Hamming_7_4_m_corr[0b010] = 5;
-    Hamming_7_4_m_corr[0b001] = 6;
-}
+// Decode DMR CACH Hamming(7,4)
+bool decodeSingleDMRHamming74(uint8_t *received) {
+    /*
+    D1 2 3 4 P1 2 3
+     1 0 0 0  1 0 1. (5)
+     0 1 0 0  1 1 1. (7)
+     0 0 1 0  1 1 0. (3)
+     0 0 0 1  0 1 1  (6)
+    */
+    
+    uint8_t D1 = received[0];
+    uint8_t D2 = received[1];
+    uint8_t D3 = received[2];
+    uint8_t D4 = received[3];
 
+    uint8_t P1 = received[4];
+    uint8_t P2 = received[5];
+    uint8_t P3 = received[6];
+    
+    // Calculate syndrome bits
+    uint8_t S1 = P1 ^ D1 ^ D2 ^ D3;
+    uint8_t S2 = P2 ^ D2 ^ D3 ^ D4;
+    uint8_t S3 = P3 ^ D1 ^ D2 ^ D4;
 
-void CHamming::QR_16_7_6_init()
-{
-    int i1 = 0, i2 = 0, ir = 0, ip = 0;
-    int syndromeI = 0, syndromeIP = 0;
-    int ip1 = 0, ip2 = 0;
-    int syndromeIP1 = 0, syndromeIP2 = 0;
+    uint8_t syndrome = (S3 << 2) | (S2 << 1) | S1;
 
-    memset(QR_16_7_6_m_corr, 0xFF, 2*512);
+    if (syndrome != 0) {
+        int errorBit = syndromeMap[syndrome];
+        if (errorBit != -1) {
+            DEBUG2("Error detected, flipping bit.", errorBit);
+            received[errorBit] ^= 1;  // Flip bit
 
-    for (i1 = 0; i1 < 7; i1++)
-    {
-        for (i2 = i1+1; i2 < 7; i2++)
-        {
-            // 2 bit patterns
-            syndromeI = 0;
-
-            for (ir = 0; ir < 9; ir++)
-            {
-                syndromeI += ((QR_16_7_6_m_H[16*ir + i1] +  QR_16_7_6_m_H[16*ir + i2]) % 2) << (8-ir);
-            }
-
-            QR_16_7_6_m_corr[syndromeI][0] = i1;
-            QR_16_7_6_m_corr[syndromeI][1] = i2;
-        }
-
-        // single bit patterns
-        syndromeI = 0;
-
-        for (ir = 0; ir < 9; ir++)
-        {
-            syndromeI += QR_16_7_6_m_H[16*ir + i1] << (8-ir);
-        }
-
-        QR_16_7_6_m_corr[syndromeI][0] = i1;
-
-        // 1 possible bit flip left in the parity part
-        for (ip = 0; ip < 9; ip++)
-        {
-            syndromeIP = syndromeI ^ (1 << (8-ip));
-            QR_16_7_6_m_corr[syndromeIP][0] = i1;
-            QR_16_7_6_m_corr[syndromeIP][1] = 7 + ip;
-        }
-    }
-
-    // no bit patterns (in message) -> all in parity
-    for (ip1 = 0; ip1 < 9; ip1++) // 1 bit flip in parity
-    {
-        syndromeIP1 = (1 << (8-ip1));
-        QR_16_7_6_m_corr[syndromeIP1][0] = 7 + ip1;
-
-        for (ip2 = ip1+1; ip2 < 9; ip2++) // 1 more bit flip in parity
-        {
-            syndromeIP2 = syndromeIP1 ^ (1 << (8-ip2));
-            QR_16_7_6_m_corr[syndromeIP2][0] = 7 + ip1;
-            QR_16_7_6_m_corr[syndromeIP2][1] = 7 + ip2;
-        }
-    }
-}
-
-bool CHamming::Hamming_7_4_decode(unsigned char *rxBits) // corrects in place
-{
-    unsigned int syndromeI = 0; // syndrome index
-    int is = 0;
-    int correction = 0;
-
-    for (is = 0; is < 3; is++)
-    {
-        syndromeI += (((rxBits[0] * Hamming_7_4_m_H[7*is + 0])
-                     + (rxBits[1] * Hamming_7_4_m_H[7*is + 1])
-                     + (rxBits[2] * Hamming_7_4_m_H[7*is + 2])
-                     + (rxBits[3] * Hamming_7_4_m_H[7*is + 3])
-                     + (rxBits[4] * Hamming_7_4_m_H[7*is + 4])
-                     + (rxBits[5] * Hamming_7_4_m_H[7*is + 5])
-                     + (rxBits[6] * Hamming_7_4_m_H[7*is + 6])) % 2) << (2-is);
-    }
-
-    if (syndromeI > 0)
-    {
-        if (Hamming_7_4_m_corr[syndromeI] == 0xFF)
-        {
-            return false;
-        }
-        else
-        {
-            rxBits[Hamming_7_4_m_corr[syndromeI]] ^= 1; // flip bit
-            correction++;
-        }
-        //not sure of upper limit on what hamming can correct (if any),
-        //but will test with 0 and 1 to see how those perform
-        if (correction > 1)
-        {
+            // Return false to indicate a change was made (it might be good now)
             return false;
         }
     }
 
+    // No bits flipped - good
     return true;
 }
 
-bool CHamming::QR_16_7_6_decode(unsigned char *rxBits)
-{
-    unsigned int syndromeI = 0; // syndrome index
-    int is = 0;
-    int i = 0;
+bool decodeDMRHamming74(uint8_t *received) {
+    // Check it multiple times to make sure we know all are valid
 
-    for (is = 0; is < 9; is++)
+    //char receivedLog[28];
+    //snprintf(receivedLog, 28, "Input Hamming 7,4: %d%d%d%d %d%d%d", 
+    //    received[0], received[1], received[2], received[3], 
+    //    received[4], received[5], received[6]);
+    //DEBUG1(receivedLog);
+
+    // The first pass may result in a bit flip, the second must not
+    for(uint8_t i=0;i<2;i++)
     {
-        syndromeI += (((rxBits[0]  * QR_16_7_6_m_H[16*is + 0])
-                     + (rxBits[1]  * QR_16_7_6_m_H[16*is + 1])
-                     + (rxBits[2]  * QR_16_7_6_m_H[16*is + 2])
-                     + (rxBits[3]  * QR_16_7_6_m_H[16*is + 3])
-                     + (rxBits[4]  * QR_16_7_6_m_H[16*is + 4])
-                     + (rxBits[5]  * QR_16_7_6_m_H[16*is + 5])
-                     + (rxBits[6]  * QR_16_7_6_m_H[16*is + 6])
-                     + (rxBits[7]  * QR_16_7_6_m_H[16*is + 7])
-                     + (rxBits[8]  * QR_16_7_6_m_H[16*is + 8])
-                     + (rxBits[9]  * QR_16_7_6_m_H[16*is + 9])
-                     + (rxBits[10] * QR_16_7_6_m_H[16*is + 10])
-                     + (rxBits[11] * QR_16_7_6_m_H[16*is + 11])
-                     + (rxBits[12] * QR_16_7_6_m_H[16*is + 12])
-                     + (rxBits[13] * QR_16_7_6_m_H[16*is + 13])
-                     + (rxBits[14] * QR_16_7_6_m_H[16*is + 14])
-                     + (rxBits[15] * QR_16_7_6_m_H[16*is + 15])) % 2) << (8-is);
-    }
-
-    if (syndromeI > 0)
-    {
-        i = 0;
-
-        for (; i < 2; i++)
-        {
-            if (QR_16_7_6_m_corr[syndromeI][i] == 0xFF)
-            {
-                break;
-            }
-            else
-            {
-                rxBits[QR_16_7_6_m_corr[syndromeI][i]] ^= 1; // flip bit
-            }
-        }
-
-        if (i == 0)
-        {
-            return false;
+        if(decodeSingleDMRHamming74(received)) {
+            return true;
         }
     }
 
-    return true;
+    return false;
 }

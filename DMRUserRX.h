@@ -22,7 +22,6 @@
  
  #include "Config.h"
  
- #include "Hamming.h"
  #include "DMRDefines.h"
  
  #define CACH_SIZE_BITS 24U
@@ -47,7 +46,6 @@
    uint16_t m_startPtr;
    uint8_t  m_colorCode;
    bool     m_slot;
-   CHamming    m_hamming;
    uint8_t m_dataFrame[DMR_FRAME_LENGTH_BYTES + 1U]; //33+1 bytes (Ignores CACH)
 
  
