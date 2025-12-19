@@ -46,7 +46,13 @@
    uint16_t m_startPtr;
    uint8_t  m_colorCode;
    bool     m_slot;
+   bool     m_dataSync[2];
+   uint8_t  m_SuperFrameIndex[2];
+   
    uint8_t m_dataFrame[DMR_FRAME_LENGTH_BYTES + 1U]; //33+1 bytes (Ignores CACH)
+
+   // A voice superframe Contains A (with voice sync), B, C, D, E, F (6)
+   uint8_t m_voiceSuperframeCount[2];
 
  
    void bitsToBytes(uint16_t start, uint8_t count, uint8_t* buffer);
