@@ -1,6 +1,7 @@
 /*
  *   Copyright (C) 2009-2017 by Jonathan Naylor G4KLX
  *   Copyright (C) 2017,2018 by Andy Uribe CA6JAU
+ *   Copyright (C) 2025-2026 by Rob Williams M1BGT
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -212,7 +213,11 @@ void CDMRUserRX::databit(bool bit)
 
                 if(correctColorCode)
                 {
-                    m_dataFrame[0U] = CONTROL_VOICE;
+                    if(m_SuperFrameIndex[m_slot ? 1 : 0] == 0) {
+                        m_dataFrame[0U] = CONTROL_VOICE;
+                    } else {
+                        m_dataFrame[0U] = m_SuperFrameIndex[m_slot ? 1 : 0];
+                    }
                     serial.writeDMRData(m_slot, m_dataFrame, DMR_FRAME_LENGTH_BYTES + 1U);
                 }
 
