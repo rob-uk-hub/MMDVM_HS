@@ -8,6 +8,12 @@ This software comes with ABSOLUTELY NO WARRANTY, it is provided "AS IS" with the
 
 This software is licenced under the GPL v2 and is intended for amateur and educational use only. Use of this software for commercial purposes is strictly forbidden.
 
+## Changes since forking
+
+Source: g4klx/MMDVM_HS
+
+DMR User Mode - enables reception of DMR data bytes from other repeaters / Base Stations
+
 # Features
 
 - Supported modes: D-Star, DMR, Yaesu Fusion, P25 Phase 1 and NXDN

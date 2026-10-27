@@ -227,12 +227,12 @@ void CSerialPort::getVersion()
   reply[3U] = PROTOCOL_VERSION;
 
   uint8_t count = 4U;
-  for (uint8_t i = 0U; HARDWARE[i] != 0x00U; i++, count++)
+  for (uint8_t i = 0U; HARDWARE[i] != 0x00U && count<131; i++, count++)
     reply[count] = HARDWARE[i];
 
 #if defined(ENABLE_UDID)
   reply[count++] = '\0';
-  for (uint8_t i = 0U; UDID[i] != 0x00U; i++, count++)
+  for (uint8_t i = 0U; UDID[i] != 0x00U && count<131; i++, count++)
     reply[count] = UDID[i];
 #endif
 
@@ -248,6 +248,9 @@ uint8_t CSerialPort::setConfig(const uint8_t* data, uint8_t length)
 
   bool ysfLoDev  = (data[0U] & 0x08U) == 0x08U;
   bool simplex   = (data[0U] & 0x80U) == 0x80U;
+
+  // add dmr user mode here or as a new mode?
+  bool dmrUserModeEnabled =  (data[0U] & 0x40U) == 0x40U;
 
   m_debug = (data[0U] & 0x10U) == 0x10U;
 
@@ -313,6 +316,7 @@ uint8_t CSerialPort::setConfig(const uint8_t* data, uint8_t length)
 
   m_dstarEnable  = dstarEnable;
   m_dmrEnable    = dmrEnable;
+  m_dmrUserMode  = dmrUserModeEnabled && m_dmrEnable;
   m_ysfEnable    = ysfEnable;
   m_p25Enable    = p25Enable;
   m_nxdnEnable   = nxdnEnable;
@@ -368,6 +372,7 @@ uint8_t CSerialPort::setConfig(const uint8_t* data, uint8_t length)
   dmrIdleRX.setColorCode(colorCode);
 #endif
 
+  dmrUserRX.setColorCode(colorCode);
   dmrDMORX.setColorCode(colorCode);
 
   io.setLoDevYSF(ysfLoDev);
@@ -508,6 +513,7 @@ void CSerialPort::setMode(MMDVM_STATE modemState)
       dmrIdleRX.reset();
       dmrRX.reset();
 #endif
+      dmrUserRX.reset();
       dmrDMORX.reset();
       ysfRX.reset();
       p25RX.reset();
@@ -521,6 +527,7 @@ void CSerialPort::setMode(MMDVM_STATE modemState)
       dmrIdleRX.reset();
       dmrRX.reset();
 #endif
+      dmrUserRX.reset();
       dmrDMORX.reset();
       dstarRX.reset();
       p25RX.reset();
@@ -534,6 +541,7 @@ void CSerialPort::setMode(MMDVM_STATE modemState)
       dmrIdleRX.reset();
       dmrRX.reset();
 #endif
+      dmrUserRX.reset();
       dmrDMORX.reset();
       dstarRX.reset();
       ysfRX.reset();
@@ -547,6 +555,7 @@ void CSerialPort::setMode(MMDVM_STATE modemState)
       dmrIdleRX.reset();
       dmrRX.reset();
 #endif
+      dmrUserRX.reset();
       dmrDMORX.reset();
       dstarRX.reset();
       ysfRX.reset();
@@ -560,6 +569,7 @@ void CSerialPort::setMode(MMDVM_STATE modemState)
       dmrIdleRX.reset();
       dmrRX.reset();
 #endif
+      dmrUserRX.reset();
       dmrDMORX.reset();
       dstarRX.reset();
       ysfRX.reset();
@@ -573,6 +583,7 @@ void CSerialPort::setMode(MMDVM_STATE modemState)
       dmrIdleRX.reset();
       dmrRX.reset();
 #endif
+      dmrUserRX.reset();
       dmrDMORX.reset();
       dstarRX.reset();
       ysfRX.reset();
@@ -740,18 +751,22 @@ void CSerialPort::process()
 
           case MMDVM_DMR_DATA1:
 #if defined(DUPLEX)
-            if (m_dmrEnable) {
-              if (m_modemState == STATE_IDLE || m_modemState == STATE_DMR) {
-                if (m_duplex)
-                  err = dmrTX.writeData1(m_buffer + 3U, m_len - 3U);
-              }
-            }
-            if (err == 0U) {
-              if (m_modemState == STATE_IDLE)
-                setMode(STATE_DMR);
+            if(m_dmrUserMode) {
+              // Ignore
             } else {
-              DEBUG2("Received invalid DMR data", err);
-              sendNAK(err);
+              if (m_dmrEnable) {
+                if (m_modemState == STATE_IDLE || m_modemState == STATE_DMR) {
+                  if (m_duplex)
+                    err = dmrTX.writeData1(m_buffer + 3U, m_len - 3U);
+                }
+              }
+              if (err == 0U) {
+                if (m_modemState == STATE_IDLE)
+                  setMode(STATE_DMR);
+              } else {
+                DEBUG2("Received invalid DMR data", err);
+                sendNAK(err);
+              }
             }
 #endif
             break;
@@ -759,14 +774,18 @@ void CSerialPort::process()
           case MMDVM_DMR_DATA2:
             if (m_dmrEnable) {
               if (m_modemState == STATE_IDLE || m_modemState == STATE_DMR) {
-              #if defined(DUPLEX)
-                if (m_duplex)
-                  err = dmrTX.writeData2(m_buffer + 3U, m_len - 3U);
-                else
-                  err = dmrDMOTX.writeData(m_buffer + 3U, m_len - 3U);
-              #else
-                  err = dmrDMOTX.writeData(m_buffer + 3U, m_len - 3U);
-              #endif
+                if(m_dmrUserMode) {
+                  // Ignore
+                } else {
+                  #if defined(DUPLEX)
+                    if (m_duplex)
+                      err = dmrTX.writeData2(m_buffer + 3U, m_len - 3U);
+                    else
+                      err = dmrDMOTX.writeData(m_buffer + 3U, m_len - 3U);
+                  #else
+                      err = dmrDMOTX.writeData(m_buffer + 3U, m_len - 3U);
+                  #endif
+                }
               }
             }
             if (err == 0U) {
@@ -1095,7 +1114,7 @@ void CSerialPort::writeDMRData(bool slot, const uint8_t* data, uint8_t length)
   reply[2U] = slot ? MMDVM_DMR_DATA2 : MMDVM_DMR_DATA1;
 
   uint8_t count = 3U;
-  for (uint8_t i = 0U; i < length; i++, count++)
+  for (uint8_t i = 0U; i < length && count < 40; i++, count++)
     reply[count] = data[i];
 
   reply[1U] = count;
@@ -1357,7 +1376,7 @@ void CSerialPort::writeRSSIData(const uint8_t* data, uint8_t length)
   reply[2U] = MMDVM_RSSI_DATA;
 
   uint8_t count = 3U;
-  for (uint8_t i = 0U; i < length; i++, count++)
+  for (uint8_t i = 0U; i < length && count < 30; i++, count++)
     reply[count] = data[i];
 
   reply[1U] = count;
@@ -1380,7 +1399,7 @@ void CSerialPort::writeDebug(const char* text)
   reply[2U] = MMDVM_DEBUG1;
 
   uint8_t count = 3U;
-  for (uint8_t i = 0U; text[i] != '\0'; i++, count++)
+  for (uint8_t i = 0U; count < 130 && text[i] != '\0'; i++, count++)
     reply[count] = text[i];
 
   reply[1U] = count;
@@ -1400,7 +1419,7 @@ void CSerialPort::writeDebugI(const char* text, int32_t n1)
   reply[2U] = MMDVM_DEBUG1;
 
   uint8_t count = 3U;
-  for (uint8_t i = 0U; text[i] != '\0'; i++, count++)
+  for (uint8_t i = 0U; count < 120 && text[i] != '\0'; i++, count++)
     reply[count] = text[i];
 
   reply[count++] = ' ';
@@ -1426,7 +1445,7 @@ void CSerialPort::writeDebug(const char* text, int16_t n1)
   reply[2U] = MMDVM_DEBUG2;
 
   uint8_t count = 3U;
-  for (uint8_t i = 0U; text[i] != '\0'; i++, count++)
+  for (uint8_t i = 0U; count < 120 && text[i] != '\0'; i++, count++)
     reply[count] = text[i];
 
   reply[count++] = (n1 >> 8) & 0xFF;
@@ -1450,7 +1469,7 @@ void CSerialPort::writeDebug(const char* text, int16_t n1, int16_t n2)
   reply[2U] = MMDVM_DEBUG3;
 
   uint8_t count = 3U;
-  for (uint8_t i = 0U; text[i] != '\0'; i++, count++)
+  for (uint8_t i = 0U; count < 120 && text[i] != '\0'; i++, count++)
     reply[count] = text[i];
 
   reply[count++] = (n1 >> 8) & 0xFF;
@@ -1477,7 +1496,7 @@ void CSerialPort::writeDebug(const char* text, int16_t n1, int16_t n2, int16_t n
   reply[2U] = MMDVM_DEBUG4;
 
   uint8_t count = 3U;
-  for (uint8_t i = 0U; text[i] != '\0'; i++, count++)
+  for (uint8_t i = 0U; count < 120 &&  text[i] != '\0'; i++, count++)
     reply[count] = text[i];
 
   reply[count++] = (n1 >> 8) & 0xFF;
@@ -1506,7 +1525,7 @@ void CSerialPort::writeDebug(const char* text, int16_t n1, int16_t n2, int16_t n
   reply[2U] = MMDVM_DEBUG5;
 
   uint8_t count = 3U;
-  for (uint8_t i = 0U; text[i] != '\0'; i++, count++)
+  for (uint8_t i = 0U; count < 120 && text[i] != '\0'; i++, count++)
     reply[count] = text[i];
 
   reply[count++] = (n1 >> 8) & 0xFF;
